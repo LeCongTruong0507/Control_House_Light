@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Điều Khiển Đèn Nhà</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    :root {
+      --bg: #eef2f6;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #475569;
+      --border: #cbd5e1;
+      --primary: #1d4ed8;
+      --primary-hover: #1e40af;
+      --green: #059669;
+      --green-bg: #d1fae5;
+      --green-text: #065f46;
+      --amber: #d97706;
+      --amber-bg: #fef3c7;
+      --red: #dc2626;
+      --red-bg: #fee2e2;
+      --shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 17px;
+      line-height: 1.45;
+      padding: 12px;
+      padding-bottom: 36px;
+    }
+
+    button, input, select {
+      font-family: inherit;
+    }
+
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    /* ===== MÀN HÌNH ĐĂNG NHẬP ===== */
+    .login-card {
+      max-width: 420px;
+      margin: 48px auto;
+      background: var(--card);
+      padding: 32px 22px;
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      border: 2px solid var(--border);
+    }
+
+    .login-card h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .login-card p.sub {
+      font-size: 16px;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 2px solid #94a3b8;
+      border-radius: 12px;
+      font-size: 20px;
+      outline: none;
+    }
+
+    .form-group input:focus { border-color: var(--primary); }
+
+    .login-err {
+      color: var(--red);
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      text-align: center;
+      min-height: 22px;
+    }
+
+    /* ===== NÚT BẤM TO DỄ CHẠM ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 50px;
+      padding: 12px 18px;
+      border-radius: 12px;
+      border: none;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.12s;
+    }
+
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--primary); color: #fff; width: 100%; }
+    .btn-success { background: var(--green); color: #fff; }
+    .btn-outline {
+      background: #fff;
+      color: var(--text);
+      border: 2px solid #94a3b8;
+    }
+    .btn-add {
+      background: #eff6ff;
+      color: var(--primary);
+      border: 2px dashed #60a5fa;
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    .btn-del {
+      background: var(--red-bg);
+      color: var(--red);
+      border: 1px solid #fca5a5;
+      min-height: 36px;
+      padding: 4px 12px;
+      font-size: 15px;
+      border-radius: 8px;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      background: var(--card);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+      border: 2px solid var(--border);
+      margin-bottom: 14px;
+    }
+
+    .header h1 {
+      font-size: 23px;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-size: 15px;
+      font-weight: 700;
+      background: #e2e8f0;
+      color: #334155;
+    }
+
+    .dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #64748b;
+    }
+
+    .badge.online { background: var(--green-bg); color: var(--green-text); }
+    .badge.online .dot { background: var(--green); }
+    .badge.offline { background: var(--red-bg); color: #991b1b; }
+    .badge.offline .dot { background: var(--red); }
+
+    .sys-info {
+      display: flex;
+      justify-content: space-around;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 16px;
+      color: var(--muted);
+      padding-top: 12px;
+      border-top: 2px solid #e2e8f0;
+    }
+
+    .sys-info strong { color: var(--text); font-size: 17px; }
+
+    /* ===== THANH BẬT/TẮT NHANH ===== */
+    .quick-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .quick-bar .btn-full {
+      grid-column: 1 / -1;
+    }
+
+    /* ===== THẺ TỪNG BÓNG ĐÈN ===== */
+    .lamp-card {
+      background: var(--card);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+      border: 3px solid var(--border);
+      margin-bottom: 18px;
+    }
+
+    .lamp-card.is-on {
+      border-color: var(--amber);
+      background: #fffdf7;
+    }
+
+    .lamp-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .lamp-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .lamp-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      background: #e2e8f0;
+    }
+
+    .lamp-card.is-on .lamp-icon { background: var(--amber-bg); }
+
+    .lamp-name { font-size: 22px; font-weight: 700; }
+    .lamp-state-text { font-size: 16px; font-weight: 700; color: var(--muted); }
+    .lamp-card.is-on .lamp-state-text { color: #b45309; }
+
+    .btn-toggle {
+      min-width: 108px;
+      min-height: 54px;
+      padding: 10px 20px;
+      border-radius: 14px;
+      border: none;
+      font-size: 19px;
+      font-weight: 700;
+      cursor: pointer;
+      background: #cbd5e1;
+      color: #0f172a;
+    }
+
+    .lamp-card.is-on .btn-toggle {
+      background: var(--amber);
+      color: #fff;
+    }
+
+    /* ===== Ô HIỂN THỊ CHẾ ĐỘ ===== */
+    .mode-box {
+      margin: 12px 0 16px 0;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 16px;
+      background: #f1f5f9;
+      color: #334155;
+      border-left: 6px solid #64748b;
+    }
+
+    .mode-box.auto {
+      background: var(--green-bg);
+      color: var(--green-text);
+      border-left-color: var(--green);
+    }
+
+    .mode-slot-line {
+      margin-top: 4px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    /* ===== KHU VỰC HẸN GIỜ ===== */
+    .timer-box {
+      padding-top: 14px;
+      border-top: 2px dashed #cbd5e1;
+    }
+
+    .timer-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .timer-label {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    /* Công tắc gạt lớn */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 62px;
+      height: 34px;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: #94a3b8;
+      border-radius: 34px;
+      transition: 0.2s;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background: #fff;
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+    .switch input:checked + .slider { background: var(--green); }
+    .switch input:checked + .slider:before { transform: translateX(28px); }
+
+    /* Từng khung giờ */
+    .slot-item {
+      background: #f8fafc;
+      border: 2px solid #cbd5e1;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .slot-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    .time-inputs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .time-field label {
+      display: block;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .time-24 {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .time-24 select {
+      flex: 1;
+      padding: 10px 4px;
+      border: 2px solid #94a3b8;
+      border-radius: 10px;
+      font-size: 19px;
+      font-weight: 700;
+      background: #fff;
+      color: var(--text);
+      text-align: center;
+    }
+
+    .time-24 span {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .footer-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #0f172a;
+      color: #fff;
+      padding: 14px 22px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+      max-width: 92vw;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s;
+      z-index: 999;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- ========== ĐĂNG NHẬP ========== -->
+    <div id="loginView" class="login-card">
+      <h1>Điều Khiển Đèn Nhà</h1>
+      <p class="sub">Nhập mật khẩu để vào điều khiển</p>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label for="inLoginPass">Mật khẩu</label>
+          <input id="inLoginPass" type="password" placeholder="Nhập mật khẩu..." required autofocus />
+        </div>
+        <div id="loginErr" class="login-err"></div>
+        <button type="submit" class="btn btn-primary">Vào điều khiển</button>
+      </form>
+    </div>
+
+    <!-- ========== MÀN HÌNH CHÍNH ========== -->
+    <div id="dashboardView" class="hidden">
+      <div class="header">
+        <h1>Điều Khiển Đèn Nhà</h1>
+        <div class="badges">
+          <span id="webBadge" class="badge">
+            <span class="dot"></span>
+            <span id="webStatusText">Mạng: Đang kết nối...</span>
+          </span>
+          <span id="espBadge" class="badge offline">
+            <span class="dot"></span>
+            <span id="espStatusText">Thiết bị: Đang tắt</span>
+          </span>
+        </div>
+
+        <div class="sys-info">
+          <span>Giờ máy: <strong id="espTime">--:--</strong></span>
+          <span>Wi-Fi: <strong id="espRssi">--</strong></span>
+          <span>Chạy: <strong id="espUptime">--</strong></span>
+        </div>
+      </div>
+
+      <div class="quick-bar">
+        <button class="btn btn-success" onclick="sendAll('ON')">Bật cả 3 đèn</button>
+        <button class="btn btn-outline" onclick="sendAll('OFF')">Tắt cả 3 đèn</button>
+        <button class="btn btn-outline btn-full" onclick="restartEsp()">Khởi động lại bộ điều khiển</button>
+      </div>
+
+      <div id="lampGrid"></div>
+
+      <div class="footer-bar">
+        <span style="font-size: 13px; color: var(--muted);" id="hostLabel"></span>
+        <button class="btn btn-outline" style="min-height: 44px;" onclick="logout()">Đăng xuất</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // ================== CẤU HÌNH CỦA BẠN ==================
+    const LOGIN_PASS = "tuan";
+
+    const MQTT_CONFIG = {
+      host: "bff01066.ala.asia-southeast1.emqxsl.com", // Địa chỉ EMQX Cloud
+      port: "8084",                                    // Cổng WebSocket (WSS)
+      user: "smartlight_v1",                       // MQTT_USER
+      pass: "Tamanh123@",                       // MQTT_PASS
+      prefix: "nha_dieu_khien"                         // Khớp TOPIC_PREFIX trên ESP32
+    };
+
+    const LAMP_NAMES = ["Đèn 1", "Đèn 2", "Đèn 3"];
+    const MAX_SLOTS  = 4;
+    // ======================================================
+
+    const AUTH_KEY = "esp32_smart_light_logged_in";
+    let client = null;
+    const lampStates = [false, false, false];
+    const timerData = [
+      { enabled: 0, slots: [{ on: "18:00", off: "22:00" }] },
+      { enabled: 0, slots: [{ on: "18:00", off: "22:00" }] },
+      { enabled: 0, slots: [{ on: "18:00", off: "22:00" }] }
+    ];
+
+    function buildOptions(max, selectedVal) {
+      let html = "";
+      for (let n = 0; n <= max; n++) {
+        const val = String(n).padStart(2, "0");
+        html += `<option value="${val}" ${val === selectedVal ? "selected" : ""}>${val}</option>`;
+      }
+      return html;
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("show"), 2800);
+    }
+
+    // ====== TẠO GIAO DIỆN 3 THẺ ĐÈN ======
+    function renderLamps() {
+      const grid = document.getElementById("lampGrid");
+      grid.innerHTML = "";
+
+      for (let i = 1; i <= 3; i++) {
+        const card = document.createElement("div");
+        card.className = "lamp-card";
+        card.id = `lampCard${i}`;
+        card.innerHTML = `
+          <div class="lamp-header">
+            <div class="lamp-title">
+              <div class="lamp-icon">💡</div>
+              <div>
+                <div class="lamp-name">${LAMP_NAMES[i - 1]}</div>
+                <div class="lamp-state-text" id="lampStateText${i}">ĐANG TẮT</div>
+              </div>
+            </div>
+            <button class="btn-toggle" id="lampBtn${i}" onclick="toggleLamp(${i})">BẬT</button>
+          </div>
+
+          <div class="mode-box" id="modeBox${i}">
+            Đang đồng bộ từ thiết bị...
+          </div>
+
+          <div class="timer-box">
+            <div class="timer-top">
+              <span class="timer-label">Hẹn giờ tự động</span>
+              <label class="switch">
+                <input type="checkbox" id="timerEn${i}" onchange="onToggleTimerSwitch(${i})" />
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div id="slotList${i}"></div>
+
+            <button class="btn btn-add" id="addSlotBtn${i}" onclick="addSlot(${i})">
+              + Thêm khung giờ
+            </button>
+
+            <button class="btn btn-primary" onclick="saveAndEnableTimer(${i})">
+              Lưu & Bật lịch hẹn giờ
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+        renderSlots(i);
+      }
+    }
+
+    // Vẽ lại danh sách các khung giờ của đèn i
+    function renderSlots(idx) {
+      const data = timerData[idx - 1];
+      const container = document.getElementById(`slotList${idx}`);
+      container.innerHTML = "";
+
+      data.slots.forEach((sl, sIdx) => {
+        const [onH, onM]   = (sl.on  || "18:00").split(":");
+        const [offH, offM] = (sl.off || "22:00").split(":");
+
+        const div = document.createElement("div");
+        div.className = "slot-item";
+        div.innerHTML = `
+          <div class="slot-head">
+            <span>Khung giờ ${sIdx + 1}</span>
+            ${data.slots.length > 1 ? `<button class="btn-del" onclick="removeSlot(${idx}, ${sIdx})">Xóa</button>` : ""}
+          </div>
+          <div class="time-inputs">
+            <div class="time-field">
+              <label>Giờ BẬT (24h)</label>
+              <div class="time-24">
+                <select onchange="updateSlotDraft(${idx}, ${sIdx}, 'onH', this.value)">${buildOptions(23, onH)}</select>
+                <span>:</span>
+                <select onchange="updateSlotDraft(${idx}, ${sIdx}, 'onM', this.value)">${buildOptions(59, onM)}</select>
+              </div>
+            </div>
+            <div class="time-field">
+              <label>Giờ TẮT (24h)</label>
+              <div class="time-24">
+                <select onchange="updateSlotDraft(${idx}, ${sIdx}, 'offH', this.value)">${buildOptions(23, offH)}</select>
+                <span>:</span>
+                <select onchange="updateSlotDraft(${idx}, ${sIdx}, 'offM', this.value)">${buildOptions(59, offM)}</select>
+              </div>
+            </div>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+
+      const addBtn = document.getElementById(`addSlotBtn${idx}`);
+      addBtn.classList.toggle("hidden", data.slots.length >= MAX_SLOTS);
+    }
+
+    function updateSlotDraft(idx, sIdx, part, val) {
+      const sl = timerData[idx - 1].slots[sIdx];
+      let [onH, onM]   = sl.on.split(":");
+      let [offH, offM] = sl.off.split(":");
+      if (part === "onH")  onH  = val;
+      if (part === "onM")  onM  = val;
+      if (part === "offH") offH = val;
+      if (part === "offM") offM = val;
+      sl.on  = `${onH}:${onM}`;
+      sl.off = `${offH}:${offM}`;
+    }
+
+    function addSlot(idx) {
+      const slots = timerData[idx - 1].slots;
+      if (slots.length >= MAX_SLOTS) return;
+      slots.push({ on: "04:30", off: "05:30" });
+      renderSlots(idx);
+    }
+
+    function removeSlot(idx, sIdx) {
+      const slots = timerData[idx - 1].slots;
+      if (slots.length <= 1) return;
+      slots.splice(sIdx, 1);
+      renderSlots(idx);
+    }
+
+    // ====== CẬP NHẬT GIAO DIỆN TỪ ESP32 ======
+    function updateLampUI(idx, isOn) {
+      lampStates[idx - 1] = isOn;
+      const card = document.getElementById(`lampCard${idx}`);
+      const text = document.getElementById(`lampStateText${idx}`);
+      const btn  = document.getElementById(`lampBtn${idx}`);
+
+      if (isOn) {
+        card.classList.add("is-on");
+        text.textContent = "ĐANG SÁNG";
+        btn.textContent  = "TẮT";
+      } else {
+        card.classList.remove("is-on");
+        text.textContent = "ĐANG TẮT";
+        btn.textContent  = "BẬT";
+      }
+    }
+
+    function updateTimerFromESP(idx, payload) {
+      const sep = payload.indexOf("|");
+      if (sep === -1) return;
+
+      const en = payload.slice(0, sep) === "1" ? 1 : 0;
+      const rawList = payload.slice(sep + 1).trim();
+      const parsedSlots = [];
+
+      if (rawList.length > 0) {
+        rawList.split(",").forEach((item) => {
+          const parts = item.split("-");
+          if (parts.length === 2) {
+            parsedSlots.push({ on: parts[0], off: parts[1] });
+          }
+        });
+      }
+
+      if (parsedSlots.length === 0) {
+        parsedSlots.push({ on: "18:00", off: "22:00" });
+      }
+
+      timerData[idx - 1] = { enabled: en, slots: parsedSlots };
+      document.getElementById(`timerEn${idx}`).checked = (en === 1);
+      renderSlots(idx);
+
+      const box = document.getElementById(`modeBox${idx}`);
+      if (en === 1) {
+        box.className = "mode-box auto";
+        const lines = parsedSlots
+          .map((s, k) => `<div class="mode-slot-line">• Khung ${k + 1}: Bật ${s.on} — Tắt ${s.off}</div>`)
+          .join("");
+        box.innerHTML = `🕒 <b>Chế độ: TỰ ĐỘNG</b>${lines}`;
+      } else {
+        box.className = "mode-box";
+        box.innerHTML = `✋ <b>Chế độ: THỦ CÔNG</b><br>Đang tắt hẹn giờ (bấm nút BẬT/TẮT bằng tay)`;
+      }
+    }
+
+    function formatUptime(sec) {
+      sec = Number(sec) || 0;
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      return h > 0 ? `${h}g ${m}p` : `${m} phút`;
+    }
+
+    // ====== GỬI LỆNH MQTT ======
+    function publishMsg(subTopic, payload) {
+      if (!client || !client.connected) {
+        showToast("Chưa kết nối được máy chủ!");
+        return false;
+      }
+      client.publish(`${MQTT_CONFIG.prefix}/${subTopic}`, payload, { qos: 1 });
+      return true;
+    }
+
+    function toggleLamp(idx) {
+      publishMsg(`den${idx}/set`, lampStates[idx - 1] ? "OFF" : "ON");
+    }
+
+    function sendAll(cmd) {
+      if (publishMsg("all/set", cmd)) {
+        showToast(cmd === "ON" ? "Đã gửi lệnh BẬT cả 3 đèn" : "Đã gửi lệnh TẮT cả 3 đèn");
+      }
+    }
+
+    function restartEsp() {
+      if (confirm("Bạn muốn khởi động lại bộ điều khiển ở nhà?")) {
+        if (publishMsg("cmd", "RESTART")) {
+          showToast("Đang khởi động lại bộ điều khiển...");
+        }
+      }
+    }
+
+    function buildTimerPayload(idx, enabledFlag) {
+      const slots = timerData[idx - 1].slots;
+      for (let k = 0; k < slots.length; k++) {
+        if (slots[k].on === slots[k].off) {
+          showToast(`Khung giờ ${k + 1}: Giờ BẬT và giờ TẮT không được trùng nhau!`);
+          return null;
+        }
+      }
+      const listStr = slots.map((s) => `${s.on}-${s.off}`).join(",");
+      return `${enabledFlag}|${listStr}`;
+    }
+
+    function saveAndEnableTimer(idx) {
+      const payload = buildTimerPayload(idx, 1);
+      if (!payload) return;
+      if (publishMsg(`den${idx}/timer/set`, payload)) {
+        showToast(`Đã lưu & bật hẹn giờ cho ${LAMP_NAMES[idx - 1]}`);
+      }
+    }
+
+    function onToggleTimerSwitch(idx) {
+      const isChecked = document.getElementById(`timerEn${idx}`).checked;
+      const payload = buildTimerPayload(idx, isChecked ? 1 : 0);
+      if (!payload) {
+        document.getElementById(`timerEn${idx}`).checked = false;
+        return;
+      }
+      if (publishMsg(`den${idx}/timer/set`, payload)) {
+        showToast(
+          isChecked
+            ? `Đã BẬT hẹn giờ cho ${LAMP_NAMES[idx - 1]}`
+            : `Đã TẮT hẹn giờ cho ${LAMP_NAMES[idx - 1]}`
+        );
+      }
+    }
+
+    // ====== KẾT NỐI EMQX ======
+    function setWebBadge(online, text) {
+      const badge = document.getElementById("webBadge");
+      badge.className = "badge " + (online ? "online" : "offline");
+      document.getElementById("webStatusText").textContent = text;
+    }
+
+    function setEspBadge(online) {
+      const badge = document.getElementById("espBadge");
+      badge.className = "badge " + (online ? "online" : "offline");
+      document.getElementById("espStatusText").textContent = online ? "Thiết bị: Đang bật" : "Thiết bị: Mất kết nối";
+    }
+
+    function enterDashboard() {
+      document.getElementById("loginView").classList.add("hidden");
+      document.getElementById("dashboardView").classList.remove("hidden");
+      document.getElementById("hostLabel").textContent = `Máy chủ: ${MQTT_CONFIG.host}`;
+
+      if (client) {
+        client.end(true);
+        client = null;
+      }
+
+      setWebBadge(false, "Mạng: Đang kết nối...");
+      setEspBadge(false);
+
+      const url = `wss://${MQTT_CONFIG.host}:${MQTT_CONFIG.port}/mqtt`;
+      const clientId = "web_den_" + Math.random().toString(16).slice(2, 10);
+
+      client = mqtt.connect(url, {
+        clientId,
+        username: MQTT_CONFIG.user,
+        password: MQTT_CONFIG.pass,
+        clean: true,
+        connectTimeout: 10000,
+        reconnectPeriod: 3000
+      });
+
+      client.on("connect", () => {
+        setWebBadge(true, "Mạng: Đã kết nối");
+        const p = MQTT_CONFIG.prefix;
+        client.subscribe([
+          `${p}/status`,
+          `${p}/info`,
+          `${p}/den1/state`, `${p}/den2/state`, `${p}/den3/state`,
+          `${p}/den1/timer/state`, `${p}/den2/timer/state`, `${p}/den3/timer/state`
+        ]);
+      });
+
+      client.on("reconnect", () => setWebBadge(false, "Mạng: Đang nối lại..."));
+      client.on("offline", () => setWebBadge(false, "Mạng: Mất kết nối"));
+
+      client.on("message", (topic, payloadBuf) => {
+        const msg = payloadBuf.toString().trim();
+        const p = MQTT_CONFIG.prefix;
+
+        if (topic === `${p}/status`) {
+          setEspBadge(msg.toUpperCase() === "ONLINE");
+          return;
+        }
+
+        if (topic === `${p}/info`) {
+          try {
+            const info = JSON.parse(msg);
+            if (info.time) document.getElementById("espTime").textContent = info.time;
+            if (info.rssi !== undefined) document.getElementById("espRssi").textContent = `${info.rssi} dBm`;
+            if (info.up !== undefined) document.getElementById("espUptime").textContent = formatUptime(info.up);
+          } catch (e) {}
+          return;
+        }
+
+        for (let i = 1; i <= 3; i++) {
+          if (topic === `${p}/den${i}/state`) {
+            updateLampUI(i, msg.toUpperCase() === "ON");
+            return;
+          }
+          if (topic === `${p}/den${i}/timer/state`) {
+            updateTimerFromESP(i, msg);
+            return;
+          }
+        }
+      });
+    }
+
+    // ====== ĐĂNG NHẬP / ĐĂNG XUẤT ======
+    document.getElementById("loginForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const inputPass = document.getElementById("inLoginPass").value.trim();
+      const errEl = document.getElementById("loginErr");
+
+      if (inputPass === LOGIN_PASS) {
+        errEl.textContent = "";
+        localStorage.setItem(AUTH_KEY, "1");
+        enterDashboard();
+      } else {
+        errEl.textContent = "Mật khẩu chưa đúng, vui lòng nhập lại!";
+        document.getElementById("inLoginPass").select();
+      }
+    });
+
+    function logout() {
+      if (client) {
+        client.end(true);
+        client = null;
+      }
+      localStorage.removeItem(AUTH_KEY);
+      document.getElementById("inLoginPass").value = "";
+      document.getElementById("loginErr").textContent = "";
+      document.getElementById("dashboardView").classList.add("hidden");
+      document.getElementById("loginView").classList.remove("hidden");
+    }
+
+    renderLamps();
+    if (localStorage.getItem(AUTH_KEY) === "1") {
+      enterDashboard();
+    }
+  </script>
+</body>
+</html>
